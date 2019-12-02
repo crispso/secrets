@@ -1,0 +1,5 @@
+go build
+cp -v secrets ~/bin/
+./secrets seal --dry-run --root ./test --key secrets
+./secrets open --dry-run --root ./test --key secrets
+tree ./test
