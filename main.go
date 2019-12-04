@@ -1,5 +1,3 @@
-// You can edit this code!
-// Click here and start typing.
 package main
 
 import (
@@ -33,15 +31,8 @@ var dryRun bool
 var projectRoot string
 var key string
 
-/*
-	secrets open <root folder>
-	secrets open :: take root folder from pwd
-	secrets seal
-*/
-
 func isIgnoredFolder(path string) bool {
 	_, ok := ignoreFolders[path]
-	// fmt.Println(path, value, ok)
 	return ok
 }
 
@@ -74,23 +65,46 @@ func findFiles(root string, re regexp.Regexp) ([]string, error) {
 	})
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		errPrintln("%s", err)
 	}
 
 	return result, nil
 }
 
-func printIf(str string) {
-	if len(str) > 0 {
-		fmt.Println(str)
+func printDebugln(format string, a ...interface{}) error {
+	if !verbose {
+		return nil
 	}
+	return errPrintln(format, a...)
+}
+
+func errPrintln(format string, a ...interface{}) error {
+	_, err := fmt.Fprintf(os.Stderr, format+"\n", a...)
+	return err
+}
+
+func runCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
+	cmd := exec.Command(
+		name,
+		arg...,
+	)
+	var stdOut bytes.Buffer
+	var stdErr bytes.Buffer
+	cmd.Stdout = &stdOut
+	cmd.Stderr = &stdErr
+	err := cmd.Run()
+	if err != nil {
+		printDebugln("command failed: %s", cmd)
+		printDebugln("%s", stdErr.String())
+	}
+	return cmd, stdOut.String(), stdErr.String(), err
 }
 
 func callKms(operation string, keyName string, plaintextFile string, ciphertextFile string) error {
 	if dryRun {
 		return nil
 	}
-	cmd := exec.Command(
+	_, _, stdErr, err := runCommand(
 		"gcloud",
 		"kms",
 		operation,
@@ -100,33 +114,24 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 		"--plaintext-file", plaintextFile,
 		"--ciphertext-file", ciphertextFile,
 	)
-	var stdOut bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-	err := cmd.Run()
 	if err != nil {
-		if strings.Contains(stdErr.String(), "NOT_FOUND: ") {
+		if strings.Contains(stdErr, "NOT_FOUND: ") {
 			err := createKey(keyName)
 			if err != nil {
 				return err
 			}
 			return callKms(operation, keyName, plaintextFile, ciphertextFile)
 		}
-		printIf(fmt.Sprintf("cmd: %s", cmd))
-		printIf(fmt.Sprintf("out: %s", stdOut.String()))
-		printIf(fmt.Sprintf("err: %s", stdErr.String()))
-		fmt.Fprintf(os.Stderr, "%s\n", err)
 	}
 	return nil
 }
 
 func createKey(keyName string) error {
-	fmt.Printf("creating key for the project %s\n", keyName)
+	printDebugln("creating key for the project %s", keyName)
 	if dryRun {
 		return nil
 	}
-	cmd := exec.Command(
+	_, _, _, err := runCommand(
 		"gcloud",
 		"kms",
 		"keys",
@@ -137,16 +142,7 @@ func createKey(keyName string) error {
 		"--location", "global",
 		"--keyring", "immi-project-secrets",
 	)
-	var stdOut bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-	err := cmd.Run()
 	if err != nil {
-		printIf(fmt.Sprintf("cmd: %s", cmd))
-		printIf(fmt.Sprintf("out: %s", stdOut.String()))
-		printIf(fmt.Sprintf("err: %s", stdErr.String()))
-		fmt.Fprintf(os.Stderr, "%s\n", err)
 		return err
 	}
 	return nil
@@ -160,7 +156,7 @@ func decrypt(keyName string, ciphertextFile string) {
 	re := regexp.MustCompile(`\.enc$`)
 	plaintextFile := re.ReplaceAllString(ciphertextFile, "")
 	if plaintextFile == ciphertextFile {
-		fmt.Fprintf(os.Stderr, "Not a .enc file: %s\n", ciphertextFile)
+		errPrintln("Not a .enc file: %s", ciphertextFile)
 		os.Exit(1)
 	}
 	callKms("decrypt", keyName, plaintextFile, ciphertextFile)
@@ -226,45 +222,27 @@ func popFiles(args []string) ([]string, []string) {
 }
 
 func isGitTracked(projectRoot string, filePath string) (bool, error) {
-	// fmt.Println("is", filePath, "tracked in", projectRoot)
-	cmd := exec.Command(
+	_, _, _, err := runCommand(
 		"git",
 		"-C", projectRoot,
 		"ls-files", "--error-unmatch", filePath,
 	)
-	var stdOut bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-	err := cmd.Run()
 	if err != nil {
-		// printIf(fmt.Sprintf("cmd: %s", cmd))
-		// printIf(fmt.Sprintf("out: %s", stdOut.String()))
-		// printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		return false, err
 	}
 	return true, nil
 }
 
 func isGitIgnored(projectRoot string, filePath string) (bool, error) {
-	// fmt.Println("is", filePath, "ignored in", projectRoot)
-	cmd := exec.Command(
+	_, stdOut, _, err := runCommand(
 		"git",
 		"-C", projectRoot,
 		"check-ignore", filePath,
 	)
-	var stdOut bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-	err := cmd.Run()
 	if err != nil {
-		printIf(fmt.Sprintf("cmd: %s", cmd))
-		printIf(fmt.Sprintf("out: %s", stdOut.String()))
-		printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		return false, err
 	}
-	return (strings.TrimSpace(stdOut.String()) == filePath), nil
+	return (strings.TrimSpace(stdOut) == filePath), nil
 }
 
 func appendToFile(filePath string, line string) error {
@@ -281,32 +259,25 @@ func appendToFile(filePath string, line string) error {
 }
 
 func addGitIgnore(projectRoot string, fileToIgnore string) error {
-	isTracked, err := isGitTracked(projectRoot, fileToIgnore)
-	if isTracked {
-		// fmt.Println("NOT appending", fileToIgnore, "to gitignore because it's already tracked")
-		return errors.New("file already tracked")
-	}
-	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
-	// fmt.Println(isIgnored, err)
-	if isIgnored {
-		// fmt.Println("NOT appending", fileToIgnore, "to gitignore because it's already ignored")
-		return nil
-	}
 	relativePath, err := filepath.Rel(projectRoot, fileToIgnore)
 	if err != nil {
 		return err
+	}
+
+	isTracked, err := isGitTracked(projectRoot, relativePath)
+	if isTracked {
+		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
+		return errors.New("file already tracked")
+	}
+	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
+	if isIgnored {
+		printDebugln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
+		return nil
 	}
 	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
 }
 
 func main() {
-	// fmt.Println(isGitTracked("/home/rauno/projects/go/secrets", "test/pipeline"))
-	// fmt.Println(addGitIgnore("/home/rauno/projects/@jobbatical/analytics", "/home/rauno/projects/@jobbatical/analytics/env.run"))
-	// os.Exit(0)
-	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
-	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
-	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
-	flag.StringVar(&key, "key", "", "Key to use")
 	var (
 		cmd   string
 		files []string
@@ -315,15 +286,18 @@ func main() {
 
 	cmd, os.Args, err = popCommand(os.Args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		errPrintln("%s", err)
 		os.Exit(1)
 	}
 
 	files, os.Args = popFiles(os.Args)
 
-	if verbose {
-		fmt.Println(os.Args)
-	}
+	printDebugln("%s", os.Args)
+
+	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
+	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
+	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
+	flag.StringVar(&key, "key", "", "Key to use")
 
 	flag.Parse()
 
@@ -335,20 +309,18 @@ func main() {
 		key = filepath.Base(projectRoot)
 	}
 
-	if verbose {
-		fmt.Printf("dry run: %t\n", dryRun)
-		fmt.Printf("key: %s\n", key)
-		fmt.Printf("project root: %s\n", projectRoot)
-		fmt.Printf("cmd: %s\n", cmd)
-		fmt.Printf("files: %s (%d)\n", files, len(files))
-	}
+	printDebugln("dry run: %t", dryRun)
+	printDebugln("key: %s", key)
+	printDebugln("project root: %s", projectRoot)
+	printDebugln("cmd: %s", cmd)
+	printDebugln("files: %s (%d)", files, len(files))
 
 	if cmd == encryptCmd {
 		if len(files) == 0 {
 			files, _ = findUnencryptedFiles(projectRoot)
 		}
 		for _, path := range files {
-			fmt.Printf("%s encrypting\n", path)
+			fmt.Printf("encrypting %s\n", path)
 			encrypt(key, path)
 			addGitIgnore(projectRoot, path)
 		}
@@ -359,11 +331,11 @@ func main() {
 			files, _ = findEncryptedFiles(projectRoot)
 		}
 		for _, path := range files {
-			fmt.Printf("%s decrypting\n", path)
+			fmt.Printf("decrypting %s\n", path)
 			decrypt(key, path)
 		}
 		os.Exit(0)
 	}
-	fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]\n", cmd)
+	errPrintln("Unknown command: %s\nUsage: secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]\n", cmd)
 	os.Exit(1)
 }

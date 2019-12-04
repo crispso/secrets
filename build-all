@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
-GOOS=darwin GOARCH=amd64 go build -o secrets-darwin-amd64-v1.0.0 main.go
-GOOS=windows GOARCH=amd64 go build -o secrets-windows-amd64-v1.0.0.exe main.go
-GOOS=linux GOARCH=amd64 go build -o secrets-linux-amd64-v1.0.0 main.go
+mkdir -p ./target
+
+V="1.0.0"
+
+echo "Building for v$V"
+
+GOOS=darwin GOARCH=amd64 go build -o ./target/secrets-darwin-amd64-v${V} main.go
+GOOS=windows GOARCH=amd64 go build -o ./target/secrets-windows-amd64-v${V}.exe main.go
+GOOS=linux GOARCH=amd64 go build -o ./target/secrets-linux-amd64-v${V} main.go
+
+echo "Binaries built to ./target"
