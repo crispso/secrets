@@ -46,7 +46,7 @@ func isIgnoredFolder(path string) bool {
 }
 
 func findEncryptedFiles(root string) ([]string, error) {
-	return findFiles(root, *regexp.MustCompile(`\.enc$`))
+	return findFiles(root, *regexp.MustCompile(`secret\.(yaml|yml)\.enc$`))
 }
 
 func findUnencryptedFiles(root string) ([]string, error) {
@@ -113,6 +113,7 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 			}
 			return callKms(operation, keyName, plaintextFile, ciphertextFile)
 		}
+		printIf(fmt.Sprintf("cmd: %s", cmd))
 		printIf(fmt.Sprintf("out: %s", stdOut.String()))
 		printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		fmt.Fprintf(os.Stderr, "%s\n", err)
@@ -142,6 +143,7 @@ func createKey(keyName string) error {
 	cmd.Stderr = &stdErr
 	err := cmd.Run()
 	if err != nil {
+		printIf(fmt.Sprintf("cmd: %s", cmd))
 		printIf(fmt.Sprintf("out: %s", stdOut.String()))
 		printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		fmt.Fprintf(os.Stderr, "%s\n", err)
@@ -198,9 +200,29 @@ func popCommand(args []string) (string, []string, error) {
 		}
 		if !strings.HasPrefix(a, "-") {
 			return a, remove(args, i), nil
+		} else {
+			break
 		}
 	}
 	return "", args, errors.New("command not found")
+}
+
+func popFiles(args []string) ([]string, []string) {
+	var (
+		file string
+		err  error
+	)
+	files := make([]string, 0, 1)
+
+	for {
+		file, os.Args, err = popCommand(os.Args)
+		if err != nil {
+			break
+		}
+		files = append(files, file)
+	}
+
+	return files, os.Args
 }
 
 func isGitTracked(projectRoot string, filePath string) (bool, error) {
@@ -216,6 +238,7 @@ func isGitTracked(projectRoot string, filePath string) (bool, error) {
 	cmd.Stderr = &stdErr
 	err := cmd.Run()
 	if err != nil {
+		// printIf(fmt.Sprintf("cmd: %s", cmd))
 		// printIf(fmt.Sprintf("out: %s", stdOut.String()))
 		// printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		return false, err
@@ -236,6 +259,7 @@ func isGitIgnored(projectRoot string, filePath string) (bool, error) {
 	cmd.Stderr = &stdErr
 	err := cmd.Run()
 	if err != nil {
+		printIf(fmt.Sprintf("cmd: %s", cmd))
 		printIf(fmt.Sprintf("out: %s", stdOut.String()))
 		printIf(fmt.Sprintf("err: %s", stdErr.String()))
 		return false, err
@@ -284,14 +308,19 @@ func main() {
 	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
 	flag.StringVar(&key, "key", "", "Key to use")
 	var (
-		cmd string
-		err error
+		cmd   string
+		files []string
+		err   error
 	)
+
 	cmd, os.Args, err = popCommand(os.Args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
+
+	files, os.Args = popFiles(os.Args)
+
 	if verbose {
 		fmt.Println(os.Args)
 	}
@@ -311,25 +340,30 @@ func main() {
 		fmt.Printf("key: %s\n", key)
 		fmt.Printf("project root: %s\n", projectRoot)
 		fmt.Printf("cmd: %s\n", cmd)
+		fmt.Printf("files: %s (%d)\n", files, len(files))
 	}
 
 	if cmd == encryptCmd {
-		files, _ := findUnencryptedFiles(projectRoot)
+		if len(files) == 0 {
+			files, _ = findUnencryptedFiles(projectRoot)
+		}
 		for _, path := range files {
+			fmt.Printf("%s encrypting\n", path)
 			encrypt(key, path)
 			addGitIgnore(projectRoot, path)
-			fmt.Printf("%s encrypted\n", path)
 		}
 		os.Exit(0)
 	}
 	if cmd == decryptCmd {
-		files, _ := findEncryptedFiles(projectRoot)
+		if len(files) == 0 {
+			files, _ = findEncryptedFiles(projectRoot)
+		}
 		for _, path := range files {
+			fmt.Printf("%s decrypting\n", path)
 			decrypt(key, path)
-			fmt.Printf("%s decrypted\n", path)
 		}
 		os.Exit(0)
 	}
-	fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: secrets [open|seal] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]\n", cmd)
+	fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]\n", cmd)
 	os.Exit(1)
 }

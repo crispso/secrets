@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
-go build
-cp -v secrets ~/bin/
-./secrets seal --dry-run --root ./test --key secrets
-./secrets open --dry-run --root ./test --key secrets
-tree ./test
+go build && (
+  cp -v secrets ~/bin/
+  ./secrets seal --verbose --root ./test --key secrets
+  ./secrets open --verbose --root ./test --key secrets
+  echo
+  echo "Specific files"
+  ./secrets seal ./test/manually-*.env --verbose --root ./test --key secrets
+  ./secrets open ./test/manually-*.env.enc --verbose --root ./test --key secrets
+  tree ./test
+) || exit 1
