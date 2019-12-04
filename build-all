@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+GOOS=darwin GOARCH=amd64 go build -o secrets-darwin-amd64-v1.0.0 main.go
+GOOS=windows GOARCH=amd64 go build -o secrets-windows-amd64-v1.0.0.exe main.go
+GOOS=linux GOARCH=amd64 go build -o secrets-linux-amd64-v1.0.0 main.go

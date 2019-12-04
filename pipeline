@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 go build
 cp -v secrets ~/bin/
 ./secrets seal --dry-run --root ./test --key secrets
