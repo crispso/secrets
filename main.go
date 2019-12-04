@@ -22,6 +22,7 @@ var ignoreFolders = map[string]struct{}{
 }
 
 const (
+	usage      string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]"
 	encryptCmd string = "seal"
 	decryptCmd string = "open"
 )
@@ -286,7 +287,7 @@ func main() {
 
 	cmd, os.Args, err = popCommand(os.Args)
 	if err != nil {
-		errPrintln("%s", err)
+		errPrintln("Error: %s\n%s", err, usage)
 		os.Exit(1)
 	}
 
@@ -336,6 +337,6 @@ func main() {
 		}
 		os.Exit(0)
 	}
-	errPrintln("Unknown command: %s\nUsage: secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]\n", cmd)
+	errPrintln("Unknown command: %s\n%s", cmd, usage)
 	os.Exit(1)
 }
