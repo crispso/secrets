@@ -29,6 +29,7 @@ const (
 	decryptCmd           string = "open"
 )
 
+var fileAlreadyTrackedError = errors.New("file already tracked")
 var verbose bool
 var dryRun bool
 var projectRoot string
@@ -216,7 +217,7 @@ func popCommand(args []string) (string, []string, error) {
 	return "", args, errors.New("command not found")
 }
 
-func popFiles(args []string) ([]string, []string) {
+func popFiles(args []string) ([]string, []string, error) {
 	var (
 		file string
 		err  error
@@ -228,10 +229,14 @@ func popFiles(args []string) ([]string, []string) {
 		if err != nil {
 			break
 		}
-		files = append(files, file)
+		absolutePath, err := filepath.Abs(file)
+		if err != nil {
+			return files, os.Args, err
+		}
+		files = append(files, absolutePath)
 	}
 
-	return files, os.Args
+	return files, os.Args, nil
 }
 
 func isGitTracked(projectRoot string, filePath string) (bool, error) {
@@ -314,7 +319,7 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 	isTracked, err := isGitTracked(projectRoot, relativePath)
 	if isTracked {
 		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
-		return errors.New("file already tracked")
+		return fileAlreadyTrackedError
 	}
 	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
 	if isIgnored {
@@ -352,7 +357,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	files, os.Args = popFiles(os.Args)
+	files, os.Args, err = popFiles(os.Args)
+	exitIfError(err)
 
 	printDebugln("%s", os.Args)
 
@@ -383,9 +389,13 @@ func main() {
 		}
 		for _, path := range files {
 			fmt.Printf("encrypting %s\n", path)
-			err := encrypt(key, path)
+			exitIfError(encrypt(key, path))
+			err := addGitIgnore(projectRoot, path)
+			if err == fileAlreadyTrackedError {
+				errPrintln("Warning: plain-text file already checked in: %s", path)
+				continue
+			}
 			exitIfError(err)
-			addGitIgnore(projectRoot, path)
 		}
 		os.Exit(0)
 	}
