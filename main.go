@@ -22,9 +22,11 @@ var ignoreFolders = map[string]struct{}{
 }
 
 const (
-	usage      string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]"
-	encryptCmd string = "seal"
-	decryptCmd string = "open"
+	expectedOrganization string = "jobbatical"
+	expectedRepoHost     string = "github.com"
+	usage                string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]"
+	encryptCmd           string = "seal"
+	decryptCmd           string = "open"
 )
 
 var verbose bool
@@ -269,6 +271,40 @@ func appendToFile(filePath string, line string) error {
 	return nil
 }
 
+func getProjectRepo(projectRoot string) (string, error) {
+	_, stdOut, _, err := runCommand("git", "-C", projectRoot, "remote", "-v")
+	if err != nil {
+		return "", err
+	}
+	example := fmt.Sprintf("git@%s:%s/<project name>.git", expectedRepoHost, expectedOrganization)
+	re := regexp.MustCompile("(?i)" + expectedRepoHost + `:([^/]*)/([^/\.]*)\.git`)
+	matches := re.FindStringSubmatch(stdOut)
+	if len(matches) == 3 {
+		org := matches[1]
+		project := matches[2]
+
+		if strings.ToLower(org) == expectedOrganization {
+			return project, nil
+		}
+
+		return "", fmt.Errorf(
+			`%s not a %s project in %s: expecting a remote %s, got %s in %s`,
+			projectRoot,
+			expectedOrganization,
+			expectedRepoHost,
+			example,
+			project,
+			org,
+		)
+	}
+	return "", fmt.Errorf(
+		`%s not a project in %s: expecting a remote %s`,
+		projectRoot,
+		expectedRepoHost,
+		example,
+	)
+}
+
 func addGitIgnore(projectRoot string, fileToIgnore string) error {
 	relativePath, err := filepath.Rel(projectRoot, fileToIgnore)
 	if err != nil {
@@ -293,6 +329,14 @@ func exitIfError(err error) {
 		errPrintln("Error: %s", err)
 		os.Exit(1)
 	}
+}
+
+func getKeyName(projectRoot string) string {
+	repo, err := getProjectRepo(projectRoot)
+	if err == nil {
+		return repo
+	}
+	return filepath.Base(projectRoot)
 }
 
 func main() {
@@ -324,7 +368,7 @@ func main() {
 	}
 
 	if key == "" {
-		key = filepath.Base(projectRoot)
+		key = getKeyName(projectRoot)
 	}
 
 	printDebugln("dry run: %t", dryRun)
