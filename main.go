@@ -32,6 +32,15 @@ var dryRun bool
 var projectRoot string
 var key string
 
+type gcloudError struct {
+	err    error
+	stdErr string
+}
+
+func (e *gcloudError) Error() string {
+	return fmt.Sprintf("gcloud command failed: %s", e.stdErr)
+}
+
 func isIgnoredFolder(path string) bool {
 	_, ok := ignoreFolders[path]
 	return ok
@@ -123,6 +132,7 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 			}
 			return callKms(operation, keyName, plaintextFile, ciphertextFile)
 		}
+		return &gcloudError{err, stdErr}
 	}
 	return nil
 }
@@ -132,7 +142,7 @@ func createKey(keyName string) error {
 	if dryRun {
 		return nil
 	}
-	_, _, _, err := runCommand(
+	_, _, stdErr, err := runCommand(
 		"gcloud",
 		"kms",
 		"keys",
@@ -144,23 +154,23 @@ func createKey(keyName string) error {
 		"--keyring", "immi-project-secrets",
 	)
 	if err != nil {
-		return err
+		return &gcloudError{err, stdErr}
 	}
 	return nil
 }
 
-func encrypt(keyName string, plaintextFile string) {
-	callKms("encrypt", keyName, plaintextFile, plaintextFile+".enc")
+func encrypt(keyName string, plaintextFile string) error {
+	return callKms("encrypt", keyName, plaintextFile, plaintextFile+".enc")
 }
 
-func decrypt(keyName string, ciphertextFile string) {
+func decrypt(keyName string, ciphertextFile string) error {
 	re := regexp.MustCompile(`\.enc$`)
 	plaintextFile := re.ReplaceAllString(ciphertextFile, "")
 	if plaintextFile == ciphertextFile {
 		errPrintln("Not a .enc file: %s", ciphertextFile)
 		os.Exit(1)
 	}
-	callKms("decrypt", keyName, plaintextFile, ciphertextFile)
+	return callKms("decrypt", keyName, plaintextFile, ciphertextFile)
 }
 
 func isProjectRoot(path string) bool {
@@ -278,6 +288,13 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
 }
 
+func exitIfError(err error) {
+	if err != nil {
+		errPrintln("Error: %s", err)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	var (
 		cmd   string
@@ -322,7 +339,8 @@ func main() {
 		}
 		for _, path := range files {
 			fmt.Printf("encrypting %s\n", path)
-			encrypt(key, path)
+			err := encrypt(key, path)
+			exitIfError(err)
 			addGitIgnore(projectRoot, path)
 		}
 		os.Exit(0)
@@ -333,7 +351,8 @@ func main() {
 		}
 		for _, path := range files {
 			fmt.Printf("decrypting %s\n", path)
-			decrypt(key, path)
+			err := decrypt(key, path)
+			exitIfError(err)
 		}
 		os.Exit(0)
 	}
