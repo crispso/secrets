@@ -2,7 +2,7 @@
 
 mkdir -p ./target
 
-V="1.1.0"
+V="1.2.0"
 
 echo "Building for v$V"
 
