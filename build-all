@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-V="1.2.1"
+V=$(cat ./VERSION)
 TARGET="./target/$V"
 
 mkdir -p $TARGET
