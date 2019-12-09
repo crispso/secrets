@@ -31,7 +31,7 @@ const (
 	location             string = "global"
 )
 
-var fileAlreadyTrackedError = errors.New("file already tracked")
+var errFileAlreadyTracked = errors.New("file already tracked")
 var verbose bool
 var dryRun bool
 var projectRoot string
@@ -321,7 +321,7 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 	isTracked, err := isGitTracked(projectRoot, relativePath)
 	if isTracked {
 		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
-		return fileAlreadyTrackedError
+		return errFileAlreadyTracked
 	}
 	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
 	if isIgnored {
@@ -393,7 +393,7 @@ func main() {
 			fmt.Printf("encrypting %s\n", path)
 			exitIfError(encrypt(key, path))
 			err := addGitIgnore(projectRoot, path)
-			if err == fileAlreadyTrackedError {
+			if err == errFileAlreadyTracked {
 				errPrintln("Warning: plain-text file already checked in: %s", path)
 				continue
 			}
