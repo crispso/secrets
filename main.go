@@ -27,6 +27,8 @@ const (
 	usage                string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]"
 	encryptCmd           string = "seal"
 	decryptCmd           string = "open"
+	keyRing              string = "immi-project-secrets"
+	location             string = "global"
 )
 
 var fileAlreadyTrackedError = errors.New("file already tracked")
@@ -121,8 +123,8 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 		"gcloud",
 		"kms",
 		operation,
-		"--location", "global",
-		"--keyring", "immi-project-secrets",
+		"--location", location,
+		"--keyring", keyRing,
 		"--key", keyName,
 		"--plaintext-file", plaintextFile,
 		"--ciphertext-file", ciphertextFile,
@@ -153,8 +155,8 @@ func createKey(keyName string) error {
 		"--purpose", "encryption",
 		"--rotation-period", "100d",
 		"--next-rotation-time", "+p100d",
-		"--location", "global",
-		"--keyring", "immi-project-secrets",
+		"--location", location,
+		"--keyring", keyRing,
 	)
 	if err != nil {
 		return &gcloudError{err, stdErr}
