@@ -1,0 +1,20 @@
+version: 2
+jobs:
+  auto-devops:
+      docker:
+      - image: gcr.io/global-mobility-services/auto-devops:master
+        auth:
+          username: _json_key
+          password: $GCLOUD_SERVICE_KEY
+      steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - checkout
+      - run: auto-devops
+
+workflows:
+  version: 2
+  main:
+    jobs:
+      - auto-devops:
+          context: org-global

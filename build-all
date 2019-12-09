@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-mkdir -p ./target
-
 V="1.2.1"
+TARGET="./target/$V"
+
+mkdir -p $TARGET
 
 echo "Building for v$V"
 
-GOOS=darwin GOARCH=amd64 go build -o ./target/secrets-darwin-amd64-v${V} main.go
-GOOS=windows GOARCH=amd64 go build -o ./target/secrets-windows-amd64-v${V}.exe main.go
-GOOS=linux GOARCH=amd64 go build -o ./target/secrets-linux-amd64-v${V} main.go
+GOOS=darwin GOARCH=amd64 go build -o "$TARGET/secrets-darwin-amd64" main.go
+GOOS=windows GOARCH=amd64 go build -o "$TARGET/secrets-windows-amd64.exe" main.go
+GOOS=linux GOARCH=amd64 go build -o "$TARGET/secrets-linux-amd64" main.go
 
 echo "Binaries built to ./target"
