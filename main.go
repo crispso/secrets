@@ -36,6 +36,7 @@ var verbose bool
 var dryRun bool
 var projectRoot string
 var key string
+var openAll bool
 
 type gcloudError struct {
 	err    error
@@ -52,7 +53,13 @@ func isIgnoredFolder(path string) bool {
 }
 
 func findEncryptedFiles(root string) ([]string, error) {
-	return findFiles(root, *regexp.MustCompile(`secret\.(yaml|yml)\.enc$`))
+	var rgx string
+	if openAll {
+		rgx = `\.enc$`
+	} else {
+		rgx = `secret\.(yaml|yml)\.enc$`
+	}
+	return findFiles(root, *regexp.MustCompile(rgx))
 }
 
 func findUnencryptedFiles(root string) ([]string, error) {
@@ -366,6 +373,7 @@ func main() {
 
 	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
 	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
+	flag.BoolVar(&openAll, "open-all", false, "Opens all .enc files withing the repository")
 	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
 	flag.StringVar(&key, "key", "", "Key to use")
 
