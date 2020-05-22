@@ -30,17 +30,20 @@ bash install
 
 ## Commands
 
-#`open`
+### `open`
 Decrypt a file or files.
 
-#`seal`
+### `seal`
 Encrypt a file or files.
 
 ## Options
-**--dry-run:**
-**--verbose:** 
-**--root <project root>:** 
-**--key <encryption key name>:**
+
+```
+[--dry-run] 
+[--verbose] 
+[--root <project root>] 
+[--key <encryption key name>]
+```
 
 
 
