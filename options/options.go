@@ -11,9 +11,9 @@ import (
 )
 
 const Usage string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>] [--open-all]"
-const ExpectedOrganization string = "jobbatical"
+const ExpectedOrganization string = "crispso"
 const ExpectedRepoHost string = "github.com"
-const KeyRing string = "immi-project-secrets"
+const KeyRing string = "crisp-project-secrets"
 const Location string = "global"
 const EncryptCmd string = "seal"
 const DecryptCmd string = "open"
