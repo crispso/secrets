@@ -4,7 +4,6 @@ package options
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"jobbatical/secrets/utils"
 	"os"
 	"path/filepath"
@@ -79,13 +78,11 @@ func init() {
 	Files, os.Args, err = popFiles(os.Args)
 	utils.ExitIfError(err)
 
-	fmt.Println("args:", os.Args)
 	flag.BoolVar(&DryRun, "dry-run", false, "Skip calls to GCP")
 	flag.StringVar(&Key, "key", "", "Key to use")
 	flag.BoolVar(&OpenAll, "open-all", false, "Opens all .enc files within the repository")
 	flag.StringVar(&ProjectRoot, "root", "", "Project root folder(name will be used as key name)")
 	flag.BoolVar(&Verbose, "verbose", false, "Log debug info")
-	fmt.Println(Verbose)
 
 	flag.Parse()
 }

@@ -84,8 +84,6 @@ func getKeyName(projectRoot string) string {
 }
 
 func main() {
-	log.PrintDebugln("%s", os.Args)
-
 	if projectRoot == "" {
 		projectRoot, _ = findProjectRoot(".")
 	}
@@ -95,8 +93,8 @@ func main() {
 	}
 
 	log.PrintDebugln("dry run: %t", options.DryRun)
-	log.PrintDebugln("options.ExpectedOrganization: %s", options.ExpectedOrganization)
-	log.PrintDebugln("options.ExpectedRepoHost: %s", options.ExpectedRepoHost)
+	log.PrintDebugln("expectedOrganization: %s", options.ExpectedOrganization)
+	log.PrintDebugln("expectedRepoHost: %s", options.ExpectedRepoHost)
 	log.PrintDebugln("keyRing: %s", options.KeyRing)
 	log.PrintDebugln("key: %s", key)
 	log.PrintDebugln("project root: %s", projectRoot)
