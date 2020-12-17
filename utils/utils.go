@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"bytes"
+	"os/exec"
 	"strings"
 )
 
@@ -111,3 +113,21 @@ func ErrPrintln(format string, a ...interface{}) error {
 	_, err := fmt.Fprintf(os.Stderr, format+"\n", a...)
 	return err
 }
+
+func RunCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
+	cmd := exec.Command(
+		name,
+		arg...,
+	)
+	var stdOut bytes.Buffer
+	var stdErr bytes.Buffer
+	cmd.Stdout = &stdOut
+	cmd.Stderr = &stdErr
+	err := cmd.Run()
+	if err != nil {
+		ErrPrintln("command failed: %s", cmd)
+		ErrPrintln("%s", stdErr.String())
+	}
+	return cmd, stdOut.String(), stdErr.String(), err
+}
+

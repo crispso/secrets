@@ -1,17 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"jobbatical/secrets/utils"
+	"jobbatical/secrets/git"
 )
 
 const (
@@ -24,7 +22,6 @@ const (
 	location             string = "global"
 )
 
-var errFileAlreadyTracked = errors.New("file already tracked")
 var verbose bool
 var dryRun bool
 var projectRoot string
@@ -41,28 +38,11 @@ func (e *gcloudError) Error() string {
 	return fmt.Sprintf("gcloud command failed: %s", e.stdErr)
 }
 
-func runCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
-	cmd := exec.Command(
-		name,
-		arg...,
-	)
-	var stdOut bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-	err := cmd.Run()
-	if err != nil {
-		printDebugln("command failed: %s", cmd)
-		printDebugln("%s", stdErr.String())
-	}
-	return cmd, stdOut.String(), stdErr.String(), err
-}
-
 func callKms(operation string, keyName string, plaintextFile string, ciphertextFile string) error {
 	if dryRun {
 		return nil
 	}
-	_, _, stdErr, err := runCommand(
+	_, _, stdErr, err := utils.RunCommand(
 		"gcloud",
 		"kms",
 		operation,
@@ -90,7 +70,7 @@ func createKey(keyName string) error {
 	if dryRun {
 		return nil
 	}
-	_, _, stdErr, err := runCommand(
+	_, _, stdErr, err := utils.RunCommand(
 		"gcloud",
 		"kms",
 		"keys",
@@ -144,45 +124,8 @@ func findProjectRoot(path string) (string, error) {
 	return findProjectRoot(nextPath)
 }
 
-func isGitTracked(projectRoot string, filePath string) (bool, error) {
-	_, _, _, err := runCommand(
-		"git",
-		"-C", projectRoot,
-		"ls-files", "--error-unmatch", filePath,
-	)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func isGitIgnored(projectRoot string, filePath string) (bool, error) {
-	_, stdOut, _, err := runCommand(
-		"git",
-		"-C", projectRoot,
-		"check-ignore", filePath,
-	)
-	if err != nil {
-		return false, err
-	}
-	return (strings.TrimSpace(stdOut) == filePath), nil
-}
-
-func appendToFile(filePath string, line string) error {
-	f, err := os.OpenFile(filePath,
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.WriteString(line + "\n"); err != nil {
-		return err
-	}
-	return nil
-}
-
 func getProjectRepo(projectRoot string) (string, error) {
-	_, stdOut, _, err := runCommand("git", "-C", projectRoot, "remote", "-v")
+	_, stdOut, _, err := utils.RunCommand("git", "-C", projectRoot, "remote", "-v")
 	if err != nil {
 		return "", err
 	}
@@ -213,25 +156,6 @@ func getProjectRepo(projectRoot string) (string, error) {
 		expectedRepoHost,
 		example,
 	)
-}
-
-func addGitIgnore(projectRoot string, fileToIgnore string) error {
-	relativePath, err := filepath.Rel(projectRoot, fileToIgnore)
-	if err != nil {
-		return err
-	}
-
-	isTracked, err := isGitTracked(projectRoot, relativePath)
-	if isTracked {
-		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
-		return errFileAlreadyTracked
-	}
-	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
-	if isIgnored {
-		printDebugln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
-		return nil
-	}
-	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
 }
 
 func exitIfError(err error) {
@@ -303,8 +227,8 @@ func main() {
 		for _, path := range files {
 			fmt.Printf("encrypting %s\n", path)
 			exitIfError(encrypt(key, path))
-			err := addGitIgnore(projectRoot, path)
-			if err == errFileAlreadyTracked {
+			err := git.AddToIgnored(projectRoot, path)
+			if err == git.ErrFileAlreadyTracked {
 				utils.ErrPrintln("Warning: plain-text file already checked in: %s", path)
 				continue
 			}
