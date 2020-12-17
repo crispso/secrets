@@ -14,7 +14,7 @@ case "$(uname -s)" in
      OS=secrets-windows-amd64.exe
      ;;
    *)
-     echo 'OS not supported' 
+     echo 'OS not supported'
      ;;
 esac
 mv ./target/${V}/${OS} /usr/local/bin/secrets

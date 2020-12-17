@@ -24,7 +24,7 @@ var ignoreFolders = map[string]struct{}{
 const (
 	expectedOrganization string = "jobbatical"
 	expectedRepoHost     string = "github.com"
-	usage                string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>]"
+	usage                string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>] [--open-all]"
 	encryptCmd           string = "seal"
 	decryptCmd           string = "open"
 	keyRing              string = "immi-project-secrets"
@@ -373,7 +373,7 @@ func main() {
 
 	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
 	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
-	flag.BoolVar(&openAll, "open-all", false, "Opens all .enc files withing the repository")
+	flag.BoolVar(&openAll, "open-all", false, "Opens all .enc files within the repository")
 	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
 	flag.StringVar(&key, "key", "", "Key to use")
 
