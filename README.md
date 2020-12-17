@@ -24,11 +24,11 @@ secrets seal [<file path>...] [options]
 - [gcloud](https://cloud.google.com/sdk/install): `secrets` uses google cloud kms for crypto.
 
 ### Installation process
-Clone this repo, build, and install:
+
+> `go help install` (`go install` is part of `go get`):
+> Install compiles and installs the packages named by the import paths.
+> Executables are installed in the directory named by the GOBIN environment variable, which defaults to $GOPATH/bin or $HOME/go/bin if the GOPATH environment variable is not set. Executables in $GOROOT are installed in $GOROOT/bin or $GOTOOLDIR instead of $GOBIN.
 
 ```
-git clone https://github.com/Jobbatical/secrets
-cd secrets
-bash build-all
-bash install
+go get github.com/jobbatical/secrets
 ```
