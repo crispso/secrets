@@ -2,104 +2,21 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
+	"jobbatical/secrets/git"
+	"jobbatical/secrets/kms"
+	"jobbatical/secrets/log"
+	"jobbatical/secrets/options"
+	"jobbatical/secrets/utils"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"jobbatical/secrets/utils"
-	"jobbatical/secrets/git"
 )
 
-const (
-	expectedOrganization string = "jobbatical"
-	expectedRepoHost     string = "github.com"
-	usage                string = "Usage secrets <open|seal> [<file path>...] [--dry-run] [--verbose] [--root <project root>] [--key <encryption key name>] [--open-all]"
-	encryptCmd           string = "seal"
-	decryptCmd           string = "open"
-	keyRing              string = "immi-project-secrets"
-	location             string = "global"
-)
-
-var verbose bool
-var dryRun bool
-var projectRoot string
-var key string
-var openAll bool
-var printDebugln = utils.ErrPrintln
-
-type gcloudError struct {
-	err    error
-	stdErr string
-}
-
-func (e *gcloudError) Error() string {
-	return fmt.Sprintf("gcloud command failed: %s", e.stdErr)
-}
-
-func callKms(operation string, keyName string, plaintextFile string, ciphertextFile string) error {
-	if dryRun {
-		return nil
-	}
-	_, _, stdErr, err := utils.RunCommand(
-		"gcloud",
-		"kms",
-		operation,
-		"--location", location,
-		"--keyring", keyRing,
-		"--key", keyName,
-		"--plaintext-file", plaintextFile,
-		"--ciphertext-file", ciphertextFile,
-	)
-	if err != nil {
-		if strings.Contains(stdErr, "NOT_FOUND: ") {
-			err := createKey(keyName)
-			if err != nil {
-				return err
-			}
-			return callKms(operation, keyName, plaintextFile, ciphertextFile)
-		}
-		return &gcloudError{err, stdErr}
-	}
-	return nil
-}
-
-func createKey(keyName string) error {
-	printDebugln("creating key for the project %s", keyName)
-	if dryRun {
-		return nil
-	}
-	_, _, stdErr, err := utils.RunCommand(
-		"gcloud",
-		"kms",
-		"keys",
-		"create", keyName,
-		"--purpose", "encryption",
-		"--rotation-period", "100d",
-		"--next-rotation-time", "+p100d",
-		"--location", location,
-		"--keyring", keyRing,
-	)
-	if err != nil {
-		return &gcloudError{err, stdErr}
-	}
-	return nil
-}
-
-func encrypt(keyName string, plaintextFile string) error {
-	return callKms("encrypt", keyName, plaintextFile, plaintextFile+".enc")
-}
-
-func decrypt(keyName string, ciphertextFile string) error {
-	re := regexp.MustCompile(`\.enc$`)
-	plaintextFile := re.ReplaceAllString(ciphertextFile, "")
-	if plaintextFile == ciphertextFile {
-		utils.ErrPrintln("Not a .enc file: %s", ciphertextFile)
-		os.Exit(1)
-	}
-	return callKms("decrypt", keyName, plaintextFile, ciphertextFile)
-}
+var verbose bool = options.Verbose
+var projectRoot string = options.ProjectRoot
+var key string = options.Key
 
 func isProjectRoot(path string) bool {
 	info, err := os.Stat(filepath.Join(path, ".git"))
@@ -129,22 +46,22 @@ func getProjectRepo(projectRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	example := fmt.Sprintf("git@%s:%s/<project name>.git", expectedRepoHost, expectedOrganization)
-	re := regexp.MustCompile("(?i)" + expectedRepoHost + `:([^/]*)/([^/\.]*)\.git`)
+	example := fmt.Sprintf("git@%s:%s/<project name>.git", options.ExpectedRepoHost, options.ExpectedOrganization)
+	re := regexp.MustCompile("(?i)" + options.ExpectedRepoHost + `:([^/]*)/([^/\.]*)\.git`)
 	matches := re.FindStringSubmatch(stdOut)
 	if len(matches) == 3 {
 		org := matches[1]
 		project := matches[2]
 
-		if strings.ToLower(org) == expectedOrganization {
+		if strings.ToLower(org) == options.ExpectedOrganization {
 			return project, nil
 		}
 
 		return "", fmt.Errorf(
 			`%s not a %s project in %s: expecting a remote %s, got %s in %s`,
 			projectRoot,
-			expectedOrganization,
-			expectedRepoHost,
+			options.ExpectedOrganization,
+			options.ExpectedRepoHost,
 			example,
 			project,
 			org,
@@ -153,16 +70,9 @@ func getProjectRepo(projectRoot string) (string, error) {
 	return "", fmt.Errorf(
 		`%s not a project in %s: expecting a remote %s`,
 		projectRoot,
-		expectedRepoHost,
+		options.ExpectedRepoHost,
 		example,
 	)
-}
-
-func exitIfError(err error) {
-	if err != nil {
-		utils.ErrPrintln("Error: %s", err)
-		os.Exit(1)
-	}
 }
 
 func getKeyName(projectRoot string) string {
@@ -174,34 +84,7 @@ func getKeyName(projectRoot string) string {
 }
 
 func main() {
-	var (
-		cmd   string
-		files []string
-		err   error
-	)
-
-	cmd, os.Args, err = utils.PopCommand(os.Args)
-	if err != nil {
-		utils.ErrPrintln("Error: %s\n%s", err, usage)
-		os.Exit(1)
-	}
-
-	files, os.Args, err = utils.PopFiles(os.Args)
-	exitIfError(err)
-
-	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
-	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
-	flag.BoolVar(&openAll, "open-all", false, "Opens all .enc files within the repository")
-	flag.StringVar(&projectRoot, "root", "", "Project root folder(name will be used as key name)")
-	flag.StringVar(&key, "key", "", "Key to use")
-
-	flag.Parse()
-
-	if (!verbose) {
-		printDebugln = utils.NoopDebugln
-	}
-
-	printDebugln("%s", os.Args)
+	log.PrintDebugln("%s", os.Args)
 
 	if projectRoot == "" {
 		projectRoot, _ = findProjectRoot(".")
@@ -211,42 +94,42 @@ func main() {
 		key = getKeyName(projectRoot)
 	}
 
-	printDebugln("dry run: %t", dryRun)
-	printDebugln("expectedOrganization: %s", expectedOrganization)
-	printDebugln("expectedRepoHost: %s", expectedRepoHost)
-	printDebugln("keyRing: %s", keyRing)
-	printDebugln("key: %s", key)
-	printDebugln("project root: %s", projectRoot)
-	printDebugln("cmd: %s", cmd)
-	printDebugln("files: %s (%d)", files, len(files))
+	log.PrintDebugln("dry run: %t", options.DryRun)
+	log.PrintDebugln("options.ExpectedOrganization: %s", options.ExpectedOrganization)
+	log.PrintDebugln("options.ExpectedRepoHost: %s", options.ExpectedRepoHost)
+	log.PrintDebugln("keyRing: %s", options.KeyRing)
+	log.PrintDebugln("key: %s", key)
+	log.PrintDebugln("project root: %s", projectRoot)
+	log.PrintDebugln("cmd: %s", options.Cmd)
+	log.PrintDebugln("files: %s (%d)", options.Files, len(options.Files))
 
-	if cmd == encryptCmd {
-		if len(files) == 0 {
-			files, _ = utils.FindUnencryptedFiles(projectRoot)
+	if options.Cmd == options.EncryptCmd {
+		if len(options.Files) == 0 {
+			options.Files, _ = utils.FindUnencryptedFiles(projectRoot)
 		}
-		for _, path := range files {
+		for _, path := range options.Files {
 			fmt.Printf("encrypting %s\n", path)
-			exitIfError(encrypt(key, path))
+			utils.ExitIfError(kms.Encrypt(key, path))
 			err := git.AddToIgnored(projectRoot, path)
 			if err == git.ErrFileAlreadyTracked {
 				utils.ErrPrintln("Warning: plain-text file already checked in: %s", path)
 				continue
 			}
-			exitIfError(err)
+			utils.ExitIfError(err)
 		}
 		os.Exit(0)
 	}
-	if cmd == decryptCmd {
-		if len(files) == 0 {
-			files, _ = utils.FindEncryptedFiles(openAll, projectRoot)
+	if options.Cmd == options.DecryptCmd {
+		if len(options.Files) == 0 {
+			options.Files, _ = utils.FindEncryptedFiles(options.OpenAll, projectRoot)
 		}
-		for _, path := range files {
+		for _, path := range options.Files {
 			fmt.Printf("decrypting %s\n", path)
-			err := decrypt(key, path)
-			exitIfError(err)
+			err := kms.Decrypt(key, path)
+			utils.ExitIfError(err)
 		}
 		os.Exit(0)
 	}
-	utils.ErrPrintln("Unknown command: %s\n%s", cmd, usage)
+	utils.ErrPrintln("Unknown command: %s\n%s", options.Cmd, options.Usage)
 	os.Exit(1)
 }

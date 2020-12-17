@@ -1,14 +1,13 @@
+// `utils` has various utilities. Should only contain pure functions not dependant on `options`.
 package utils
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
-	"bytes"
-	"os/exec"
-	"strings"
 )
 
 var ignore = struct{}{}
@@ -22,46 +21,6 @@ var ignoreFolders = map[string]struct{}{
 func IsIgnoredFolder(path string) bool {
 	_, ok := ignoreFolders[path]
 	return ok
-}
-
-func Remove(slice []string, s int) []string {
-	return append(slice[:s], slice[s+1:]...)
-}
-
-func PopCommand(args []string) (string, []string, error) {
-	for i, a := range args {
-		if i == 0 {
-			continue
-		}
-		if !strings.HasPrefix(a, "-") {
-			return a, Remove(args, i), nil
-		} else {
-			break
-		}
-	}
-	return "", args, errors.New("command not found")
-}
-
-func PopFiles(args []string) ([]string, []string, error) {
-	var (
-		file string
-		err  error
-	)
-	files := make([]string, 0, 1)
-
-	for {
-		file, os.Args, err = PopCommand(os.Args)
-		if err != nil {
-			break
-		}
-		absolutePath, err := filepath.Abs(file)
-		if err != nil {
-			return files, os.Args, err
-		}
-		files = append(files, absolutePath)
-	}
-
-	return files, os.Args, nil
 }
 
 func FindEncryptedFiles(openAll bool, root string) ([]string, error) {
@@ -105,15 +64,6 @@ func FindFiles(root string, re regexp.Regexp) ([]string, error) {
 	return result, nil
 }
 
-func NoopDebugln(format string, a ...interface{}) error {
-	return nil
-}
-
-func ErrPrintln(format string, a ...interface{}) error {
-	_, err := fmt.Fprintf(os.Stderr, format+"\n", a...)
-	return err
-}
-
 func RunCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
 	cmd := exec.Command(
 		name,
@@ -131,3 +81,18 @@ func RunCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
 	return cmd, stdOut.String(), stdErr.String(), err
 }
 
+func NoopDebugln(format string, a ...interface{}) error {
+	return nil
+}
+
+func ErrPrintln(format string, a ...interface{}) error {
+	_, err := fmt.Fprintf(os.Stderr, format+"\n", a...)
+	return err
+}
+
+func ExitIfError(err error) {
+	if err != nil {
+		ErrPrintln("Error: %s", err)
+		os.Exit(1)
+	}
+}

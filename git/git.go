@@ -1,12 +1,13 @@
 package git
 
 import (
-	"os"
 	"errors"
-	"path/filepath"
-	"path"
-	"strings"
+	"jobbatical/secrets/log"
 	"jobbatical/secrets/utils"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 )
 
 var ErrFileAlreadyTracked = errors.New("file already tracked")
@@ -56,12 +57,12 @@ func AddToIgnored(projectRoot string, fileToIgnore string) error {
 
 	isTracked, err := isTracked(projectRoot, relativePath)
 	if isTracked {
-		utils.ErrPrintln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
+		log.PrintDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
 		return ErrFileAlreadyTracked
 	}
 	isIgnored, err := isIgnored(projectRoot, fileToIgnore)
 	if isIgnored {
-		utils.ErrPrintln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
+		log.PrintDebugln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
 		return nil
 	}
 	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
