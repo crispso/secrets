@@ -103,11 +103,8 @@ func FindFiles(root string, re regexp.Regexp) ([]string, error) {
 	return result, nil
 }
 
-func PrintDebugln(verbose bool, format string, a ...interface{}) error {
-	if !verbose {
-		return nil
-	}
-	return ErrPrintln(format, a...)
+func NoopDebugln(format string, a ...interface{}) error {
+	return nil
 }
 
 func ErrPrintln(format string, a ...interface{}) error {

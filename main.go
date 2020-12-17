@@ -30,6 +30,7 @@ var dryRun bool
 var projectRoot string
 var key string
 var openAll bool
+var printDebugln = utils.ErrPrintln
 
 type gcloudError struct {
 	err    error
@@ -51,8 +52,8 @@ func runCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
 	cmd.Stderr = &stdErr
 	err := cmd.Run()
 	if err != nil {
-		utils.PrintDebugln(verbose, "command failed: %s", cmd)
-		utils.PrintDebugln(verbose, "%s", stdErr.String())
+		printDebugln("command failed: %s", cmd)
+		printDebugln("%s", stdErr.String())
 	}
 	return cmd, stdOut.String(), stdErr.String(), err
 }
@@ -85,7 +86,7 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 }
 
 func createKey(keyName string) error {
-	utils.PrintDebugln(verbose, "creating key for the project %s", keyName)
+	printDebugln("creating key for the project %s", keyName)
 	if dryRun {
 		return nil
 	}
@@ -222,12 +223,12 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 
 	isTracked, err := isGitTracked(projectRoot, relativePath)
 	if isTracked {
-		utils.PrintDebugln(verbose, "NOT appending %s to gitignore because it's already tracked", fileToIgnore)
+		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
 		return errFileAlreadyTracked
 	}
 	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
 	if isIgnored {
-		utils.PrintDebugln(verbose, "NOT appending %s to gitignore because it's already ignored", fileToIgnore)
+		printDebugln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
 		return nil
 	}
 	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
@@ -264,8 +265,6 @@ func main() {
 	files, os.Args, err = utils.PopFiles(os.Args)
 	exitIfError(err)
 
-	utils.PrintDebugln(verbose, "%s", os.Args)
-
 	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
 	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
 	flag.BoolVar(&openAll, "open-all", false, "Opens all .enc files within the repository")
@@ -273,6 +272,12 @@ func main() {
 	flag.StringVar(&key, "key", "", "Key to use")
 
 	flag.Parse()
+
+	if (!verbose) {
+		printDebugln = utils.NoopDebugln
+	}
+
+	printDebugln("%s", os.Args)
 
 	if projectRoot == "" {
 		projectRoot, _ = findProjectRoot(".")
@@ -282,14 +287,14 @@ func main() {
 		key = getKeyName(projectRoot)
 	}
 
-	utils.PrintDebugln(verbose, "dry run: %t", dryRun)
-	utils.PrintDebugln(verbose, "expectedOrganization: %s", expectedOrganization)
-	utils.PrintDebugln(verbose, "expectedRepoHost: %s", expectedRepoHost)
-	utils.PrintDebugln(verbose, "keyRing: %s", keyRing)
-	utils.PrintDebugln(verbose, "key: %s", key)
-	utils.PrintDebugln(verbose, "project root: %s", projectRoot)
-	utils.PrintDebugln(verbose, "cmd: %s", cmd)
-	utils.PrintDebugln(verbose, "files: %s (%d)", files, len(files))
+	printDebugln("dry run: %t", dryRun)
+	printDebugln("expectedOrganization: %s", expectedOrganization)
+	printDebugln("expectedRepoHost: %s", expectedRepoHost)
+	printDebugln("keyRing: %s", keyRing)
+	printDebugln("key: %s", key)
+	printDebugln("project root: %s", projectRoot)
+	printDebugln("cmd: %s", cmd)
+	printDebugln("files: %s (%d)", files, len(files))
 
 	if cmd == encryptCmd {
 		if len(files) == 0 {
