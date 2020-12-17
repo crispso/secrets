@@ -11,15 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"jobbatical/secrets/utils"
 )
-
-var ignore = struct{}{}
-
-var ignoreFolders = map[string]struct{}{
-	".git":         ignore,
-	"node_modules": ignore,
-	"mongo-data":   ignore,
-}
 
 const (
 	expectedOrganization string = "jobbatical"
@@ -47,64 +40,6 @@ func (e *gcloudError) Error() string {
 	return fmt.Sprintf("gcloud command failed: %s", e.stdErr)
 }
 
-func isIgnoredFolder(path string) bool {
-	_, ok := ignoreFolders[path]
-	return ok
-}
-
-func findEncryptedFiles(root string) ([]string, error) {
-	var rgx string
-	if openAll {
-		rgx = `\.enc$`
-	} else {
-		rgx = `secret\.(yaml|yml)\.enc$`
-	}
-	return findFiles(root, *regexp.MustCompile(rgx))
-}
-
-func findUnencryptedFiles(root string) ([]string, error) {
-	return findFiles(root, *regexp.MustCompile(`secret\.(yaml|yml)$`))
-}
-
-func findFiles(root string, re regexp.Regexp) ([]string, error) {
-	result := make([]string, 0, 1)
-
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if isIgnoredFolder(info.Name()) {
-			return filepath.SkipDir
-		}
-
-		if !info.IsDir() && re.MatchString(path) {
-			absolutePath, _ := filepath.Abs(path)
-			result = append(result, absolutePath)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		errPrintln("%s", err)
-	}
-
-	return result, nil
-}
-
-func printDebugln(format string, a ...interface{}) error {
-	if !verbose {
-		return nil
-	}
-	return errPrintln(format, a...)
-}
-
-func errPrintln(format string, a ...interface{}) error {
-	_, err := fmt.Fprintf(os.Stderr, format+"\n", a...)
-	return err
-}
-
 func runCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
 	cmd := exec.Command(
 		name,
@@ -116,8 +51,8 @@ func runCommand(name string, arg ...string) (*exec.Cmd, string, string, error) {
 	cmd.Stderr = &stdErr
 	err := cmd.Run()
 	if err != nil {
-		printDebugln("command failed: %s", cmd)
-		printDebugln("%s", stdErr.String())
+		utils.PrintDebugln(verbose, "command failed: %s", cmd)
+		utils.PrintDebugln(verbose, "%s", stdErr.String())
 	}
 	return cmd, stdOut.String(), stdErr.String(), err
 }
@@ -150,7 +85,7 @@ func callKms(operation string, keyName string, plaintextFile string, ciphertextF
 }
 
 func createKey(keyName string) error {
-	printDebugln("creating key for the project %s", keyName)
+	utils.PrintDebugln(verbose, "creating key for the project %s", keyName)
 	if dryRun {
 		return nil
 	}
@@ -179,7 +114,7 @@ func decrypt(keyName string, ciphertextFile string) error {
 	re := regexp.MustCompile(`\.enc$`)
 	plaintextFile := re.ReplaceAllString(ciphertextFile, "")
 	if plaintextFile == ciphertextFile {
-		errPrintln("Not a .enc file: %s", ciphertextFile)
+		utils.ErrPrintln("Not a .enc file: %s", ciphertextFile)
 		os.Exit(1)
 	}
 	return callKms("decrypt", keyName, plaintextFile, ciphertextFile)
@@ -206,46 +141,6 @@ func findProjectRoot(path string) (string, error) {
 		return path, nil
 	}
 	return findProjectRoot(nextPath)
-}
-
-func remove(slice []string, s int) []string {
-	return append(slice[:s], slice[s+1:]...)
-}
-
-func popCommand(args []string) (string, []string, error) {
-	for i, a := range args {
-		if i == 0 {
-			continue
-		}
-		if !strings.HasPrefix(a, "-") {
-			return a, remove(args, i), nil
-		} else {
-			break
-		}
-	}
-	return "", args, errors.New("command not found")
-}
-
-func popFiles(args []string) ([]string, []string, error) {
-	var (
-		file string
-		err  error
-	)
-	files := make([]string, 0, 1)
-
-	for {
-		file, os.Args, err = popCommand(os.Args)
-		if err != nil {
-			break
-		}
-		absolutePath, err := filepath.Abs(file)
-		if err != nil {
-			return files, os.Args, err
-		}
-		files = append(files, absolutePath)
-	}
-
-	return files, os.Args, nil
 }
 
 func isGitTracked(projectRoot string, filePath string) (bool, error) {
@@ -327,12 +222,12 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 
 	isTracked, err := isGitTracked(projectRoot, relativePath)
 	if isTracked {
-		printDebugln("NOT appending %s to gitignore because it's already tracked", fileToIgnore)
+		utils.PrintDebugln(verbose, "NOT appending %s to gitignore because it's already tracked", fileToIgnore)
 		return errFileAlreadyTracked
 	}
 	isIgnored, err := isGitIgnored(projectRoot, fileToIgnore)
 	if isIgnored {
-		printDebugln("NOT appending %s to gitignore because it's already ignored", fileToIgnore)
+		utils.PrintDebugln(verbose, "NOT appending %s to gitignore because it's already ignored", fileToIgnore)
 		return nil
 	}
 	return appendToFile(path.Join(projectRoot, ".gitignore"), relativePath)
@@ -340,7 +235,7 @@ func addGitIgnore(projectRoot string, fileToIgnore string) error {
 
 func exitIfError(err error) {
 	if err != nil {
-		errPrintln("Error: %s", err)
+		utils.ErrPrintln("Error: %s", err)
 		os.Exit(1)
 	}
 }
@@ -360,16 +255,16 @@ func main() {
 		err   error
 	)
 
-	cmd, os.Args, err = popCommand(os.Args)
+	cmd, os.Args, err = utils.PopCommand(os.Args)
 	if err != nil {
-		errPrintln("Error: %s\n%s", err, usage)
+		utils.ErrPrintln("Error: %s\n%s", err, usage)
 		os.Exit(1)
 	}
 
-	files, os.Args, err = popFiles(os.Args)
+	files, os.Args, err = utils.PopFiles(os.Args)
 	exitIfError(err)
 
-	printDebugln("%s", os.Args)
+	utils.PrintDebugln(verbose, "%s", os.Args)
 
 	flag.BoolVar(&verbose, "verbose", false, "Log debug info")
 	flag.BoolVar(&dryRun, "dry-run", false, "Skip calls to GCP")
@@ -387,22 +282,25 @@ func main() {
 		key = getKeyName(projectRoot)
 	}
 
-	printDebugln("dry run: %t", dryRun)
-	printDebugln("key: %s", key)
-	printDebugln("project root: %s", projectRoot)
-	printDebugln("cmd: %s", cmd)
-	printDebugln("files: %s (%d)", files, len(files))
+	utils.PrintDebugln(verbose, "dry run: %t", dryRun)
+	utils.PrintDebugln(verbose, "expectedOrganization: %s", expectedOrganization)
+	utils.PrintDebugln(verbose, "expectedRepoHost: %s", expectedRepoHost)
+	utils.PrintDebugln(verbose, "keyRing: %s", keyRing)
+	utils.PrintDebugln(verbose, "key: %s", key)
+	utils.PrintDebugln(verbose, "project root: %s", projectRoot)
+	utils.PrintDebugln(verbose, "cmd: %s", cmd)
+	utils.PrintDebugln(verbose, "files: %s (%d)", files, len(files))
 
 	if cmd == encryptCmd {
 		if len(files) == 0 {
-			files, _ = findUnencryptedFiles(projectRoot)
+			files, _ = utils.FindUnencryptedFiles(projectRoot)
 		}
 		for _, path := range files {
 			fmt.Printf("encrypting %s\n", path)
 			exitIfError(encrypt(key, path))
 			err := addGitIgnore(projectRoot, path)
 			if err == errFileAlreadyTracked {
-				errPrintln("Warning: plain-text file already checked in: %s", path)
+				utils.ErrPrintln("Warning: plain-text file already checked in: %s", path)
 				continue
 			}
 			exitIfError(err)
@@ -411,7 +309,7 @@ func main() {
 	}
 	if cmd == decryptCmd {
 		if len(files) == 0 {
-			files, _ = findEncryptedFiles(projectRoot)
+			files, _ = utils.FindEncryptedFiles(openAll, projectRoot)
 		}
 		for _, path := range files {
 			fmt.Printf("decrypting %s\n", path)
@@ -420,6 +318,6 @@ func main() {
 		}
 		os.Exit(0)
 	}
-	errPrintln("Unknown command: %s\n%s", cmd, usage)
+	utils.ErrPrintln("Unknown command: %s\n%s", cmd, usage)
 	os.Exit(1)
 }
